@@ -87,7 +87,7 @@ if(!sala){ // ===== TRANSMISSOR =====
             p.encodings[0].maxBitrate=25000000;p.encodings[0].maxFramerate=60;
             p.encodings[0].scaleResolutionDownBy=1;p.encodings[0].priority='high';p.encodings[0].networkPriority='high';
             p.degradationPreference='maintain-framerate';
-            try{await snd.setParameters(p);}catch(e){console.warn(e)}
+            try{await snd.setParameters(p);}catch(e){delete p.degradationPreference;try{await snd.setParameters(p);}catch(e2){console.warn(e2)}}
           }
         };
         pc.addEventListener('connectionstatechange',()=>{if(pc.connectionState==='connected')turbo()});
