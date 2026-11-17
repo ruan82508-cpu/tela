@@ -61,8 +61,10 @@ if(!sala){ // ===== TRANSMISSOR =====
   const upd=()=>{const n=viewers.size;$('nViewers').textContent=n?`${n} pessoa(s) assistindo.`:'Ninguém assistindo ainda.'};
   $('btnStart').onclick=async()=>{
     $('txMsg').textContent='';
-    try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:15},audio:true});}
+    try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:60,max:60},width:{ideal:3840},height:{ideal:2160}},audio:true});}
     catch(e){$('txMsg').textContent='Captura cancelada ou bloqueada pelo navegador.';return;}
+    const vt=stream.getVideoTracks()[0];
+    try{vt.contentHint='motion';await vt.applyConstraints({frameRate:{ideal:60}});}catch(e){}
     const id=Math.random().toString(36).slice(2,8);
     peer=new Peer(PREF+id,ICE);
     peer.on('open',()=>{
@@ -77,6 +79,19 @@ if(!sala){ // ===== TRANSMISSOR =====
       conn.on('open',()=>{
         const call=peer.call(conn.peer,stream);
         viewers.set(conn.peer,call);upd();
+        const pc=call.peerConnection;
+        const turbo=async()=>{
+          for(const snd of pc.getSenders()){
+            if(!snd.track||snd.track.kind!=='video')continue;
+            const p=snd.getParameters();if(!p.encodings||!p.encodings.length)p.encodings=[{}];
+            p.encodings[0].maxBitrate=25000000;p.encodings[0].maxFramerate=60;
+            p.encodings[0].scaleResolutionDownBy=1;p.encodings[0].priority='high';p.encodings[0].networkPriority='high';
+            p.degradationPreference='maintain-framerate';
+            try{await snd.setParameters(p);}catch(e){console.warn(e)}
+          }
+        };
+        pc.addEventListener('connectionstatechange',()=>{if(pc.connectionState==='connected')turbo()});
+        setTimeout(turbo,1500);
         const sai=()=>{viewers.delete(conn.peer);upd();};
         conn.on('close',sai);call.on('close',sai);call.on('error',sai);
       });
