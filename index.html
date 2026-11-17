@@ -6,83 +6,163 @@
 <title>Transmitir Tela</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
-:root{--bg:#0f1115;--card:#1a1d24;--tx:#e8eaed;--mut:#9aa0a6;--ac:#2f7cf6;--ok:#22a35a;--err:#d9483b}
+:root{--bg:#0f1115;--card:#1a1d24;--tx:#e8eaed;--mut:#9aa0a6;--ac:#2f7cf6;--ok:#22a35a;--err:#d9483b;--warn:#f0a04b}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,Segoe UI,Arial,sans-serif;min-height:100vh;display:flex;flex-direction:column}
 header{padding:14px 16px;font-weight:600;display:flex;gap:10px;align-items:center}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--mut)}
 .dot.on{background:var(--err);box-shadow:0 0 8px var(--err)}
 main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:16px}
-.card{background:var(--card);border-radius:12px;padding:20px;max-width:560px;width:100%}
+.card{background:var(--card);border-radius:12px;padding:20px;max-width:600px;width:100%}
 button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:12px 18px;font-size:15px;cursor:pointer}
 button.sec{background:#33373f}button.red{background:var(--err)}button.wa{background:var(--ok)}
-.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-input{flex:1;min-width:0;background:#0b0d10;color:var(--tx);border:1px solid #333;border-radius:8px;padding:10px;font-size:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center}
+input[type=text],input:not([type]){flex:1;min-width:0;background:#0b0d10;color:var(--tx);border:1px solid #333;border-radius:8px;padding:10px;font-size:14px}
 .mut{color:var(--mut);font-size:13px}
-video{width:100%;max-height:calc(100vh - 120px);background:#000;border-radius:8px}
+.warn{color:var(--warn)}
+video{width:100%;max-height:calc(100vh - 170px);background:#000;border-radius:8px}
 .hide{display:none!important}
+.q{display:flex;gap:6px;flex-wrap:wrap}
+.q button{background:#33373f;padding:8px 12px;font-size:14px}
+.q button.sel{background:var(--ac)}
+.vu{height:8px;background:#0b0d10;border-radius:4px;overflow:hidden;flex:1;min-width:80px}
+.vu i{display:block;height:100%;width:0;background:var(--ok);transition:width .08s}
+.stats{font:12px/1.4 ui-monospace,Consolas,monospace;color:var(--mut)}
 </style>
 </head>
 <body>
 <header><span id="dot" class="dot"></span><span id="titulo">Transmitir Tela</span></header>
 <main>
-  <!-- TRANSMISSOR -->
+  <!-- ===== TRANSMISSOR ===== -->
   <div id="tx" class="card hide">
-    <div id="txIni">
-      <p>Clique para escolher a tela ou janela que será transmitida.</p>
-      <label style="display:block;margin:0 0 12px"><input type="checkbox" id="chkMic" style="flex:none;width:auto"> Incluir meu microfone</label>
+    <div class="mut" style="margin-bottom:6px">Qualidade</div>
+    <div class="q" id="qBtns"></div>
+    <div id="txIni" style="margin-top:16px">
+      <label style="display:block;margin:0 0 12px"><input type="checkbox" id="chkMic"> Incluir meu microfone</label>
       <button id="btnStart">Transmitir minha tela</button>
-      <p class="mut">Para ter som: na janela do navegador marque <b>"Compartilhar áudio do sistema"</b> (tela inteira) ou <b>"Compartilhar áudio da guia"</b> (aba).</p>
-      <p class="mut">Mantenha esta aba aberta durante a transmissão.</p>
+      <p class="mut">Para ter som: escolha <b>Tela inteira</b> e marque <b>"Compartilhar áudio do sistema"</b>, ou escolha uma <b>Guia</b> e marque <b>"Compartilhar áudio da guia"</b>. Janela de programa não envia som.</p>
     </div>
-    <div id="txOn" class="hide">
-      <p><b>Transmitindo.</b> Envie este link:</p>
+    <div id="txOn" class="hide" style="margin-top:16px">
+      <p style="margin:0"><b>Transmitindo.</b> Envie este link:</p>
       <div class="row"><input id="link" readonly><button id="btnCopy" class="sec">Copiar</button></div>
       <div class="row"><button id="btnWa" class="wa">Enviar no WhatsApp</button><button id="btnStop" class="red">Parar</button></div>
-      <p id="semAudio" class="hide" style="color:#f0a04b">⚠ Sem áudio: você não marcou "Compartilhar áudio". Clique em Parar e transmita de novo marcando a opção.</p>
+      <div class="row"><span class="mut">Som saindo:</span><div class="vu"><i id="vuTx"></i></div></div>
+      <p id="semAudio" class="warn hide">⚠ Sem áudio capturado: você não marcou "Compartilhar áudio". Clique em Parar e transmita de novo marcando a opção.</p>
+      <p class="stats" id="txStats"></p>
       <p class="mut" id="nViewers">Ninguém assistindo ainda.</p>
     </div>
     <p id="txMsg" class="mut"></p>
   </div>
-  <video id="preview" class="hide" muted autoplay playsinline></video>
-  <!-- ESPECTADOR -->
+  <video id="preview" class="hide" muted autoplay playsinline style="max-width:600px"></video>
+
+  <!-- ===== ESPECTADOR ===== -->
   <div id="rx" class="hide" style="width:100%;max-width:1600px">
     <p id="rxMsg" class="mut" style="text-align:center">Conectando…</p>
-    <video id="v" class="hide" autoplay playsinline muted controls></video>
-    <div class="row" style="justify-content:center"><button id="btnSom" class="hide" style="font-size:18px;padding:14px 26px">🔊 Toque para ativar o som</button><button id="btnFull" class="sec hide">Tela cheia</button></div>
+    <video id="v" class="hide" autoplay playsinline muted></video>
+    <div class="row" style="justify-content:center">
+      <button id="btnSom" class="hide" style="font-size:18px;padding:14px 26px">🔊 Toque para ativar o som</button>
+      <button id="btnFull" class="sec hide">Tela cheia</button>
+    </div>
+    <div class="row hide" id="rxVuRow" style="max-width:500px;margin:10px auto 0"><span class="mut">Som chegando:</span><div class="vu"><i id="vuRx"></i></div></div>
+    <p class="stats" id="rxStats" style="text-align:center"></p>
   </div>
 </main>
 <script>
 const $=id=>document.getElementById(id);
 const PREF='amnis-tela-';
 const sala=new URLSearchParams(location.search).get('sala');
-const opusHQ=sdp=>{const m=sdp.match(/a=rtpmap:(\d+) opus\/48000/i);if(!m)return sdp;const pt=m[1];
-  return sdp.replace(new RegExp('a=fmtp:'+pt+' ([^\r\n]*)'),(x,f)=>'a=fmtp:'+pt+' '+f.replace(/;?(stereo|sprop-stereo|maxaveragebitrate|useinbandfec)=[^;]*/g,'')+';stereo=1;sprop-stereo=1;maxaveragebitrate=510000;useinbandfec=1');};
 const ICE={config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'}]}};
 
-if(!sala){ // ===== TRANSMISSOR =====
+// Opus estéreo 510 kbps
+const opusHQ=sdp=>{const m=sdp.match(/a=rtpmap:(\d+) opus\/48000/i);if(!m)return sdp;const pt=m[1];
+  return sdp.replace(new RegExp('a=fmtp:'+pt+' ([^\\r\\n]*)'),(x,f)=>'a=fmtp:'+pt+' '+f.replace(/;?(stereo|sprop-stereo|maxaveragebitrate|useinbandfec)=[^;]*/g,'').replace(/^;/,'')+';stereo=1;sprop-stereo=1;maxaveragebitrate=510000;useinbandfec=1');};
+
+// Medidor de volume
+function vu(stream,el){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const an=ctx.createAnalyser();an.fftSize=512;
+    ctx.createMediaStreamSource(stream).connect(an);
+    const d=new Uint8Array(an.fftSize);
+    (function loop(){an.getByteTimeDomainData(d);let m=0;for(const x of d)m=Math.max(m,Math.abs(x-128));el.style.width=Math.min(100,m/1.28*1.5)+'%';requestAnimationFrame(loop)})();
+    return ctx;
+  }catch(e){return null}
+}
+
+const QUAL={
+  max:  {nome:'Máxima',   w:3840,h:2160,fps:60,kbps:25000},
+  alta: {nome:'Alta 1080p',w:1920,h:1080,fps:60,kbps:12000},
+  media:{nome:'Média 720p',w:1280,h:720, fps:30,kbps:4000},
+  eco:  {nome:'Economia', w:854, h:480, fps:15,kbps:1200},
+};
+
+if(!sala){ // ================= TRANSMISSOR =================
   $('tx').classList.remove('hide');
-  let peer,stream,viewers=new Map();
-  const upd=()=>{const n=viewers.size;$('nViewers').textContent=n?`${n} pessoa(s) assistindo.`:'Ninguém assistindo ainda.'};
+  let peer,stream,extras=[],viewers=new Map(),qSel='max';
+  try{qSel=localStorage.getItem('qual')||'max'}catch(e){}
+  if(!QUAL[qSel])qSel='max';
+  const qb=$('qBtns');
+  for(const k in QUAL){const b=document.createElement('button');b.textContent=QUAL[k].nome;b.dataset.k=k;b.onclick=()=>setQual(k);qb.appendChild(b)}
+  const marcaQ=()=>[...qb.children].forEach(b=>b.classList.toggle('sel',b.dataset.k===qSel));
+  marcaQ();
+
+  async function setQual(k){
+    qSel=k;marcaQ();try{localStorage.setItem('qual',k)}catch(e){}
+    if(!stream)return;
+    const q=QUAL[k],vt=stream.getVideoTracks()[0];
+    try{await vt.applyConstraints({width:{max:q.w},height:{max:q.h},frameRate:{ideal:q.fps,max:q.fps}})}catch(e){}
+    for(const call of viewers.values())tunePc(call.peerConnection);
+  }
+  async function tunePc(pc){
+    const q=QUAL[qSel];
+    for(const snd of pc.getSenders()){
+      if(!snd.track)continue;
+      const p=snd.getParameters();if(!p.encodings||!p.encodings.length)p.encodings=[{}];
+      if(snd.track.kind==='video'){
+        p.encodings[0].maxBitrate=q.kbps*1000;p.encodings[0].maxFramerate=q.fps;p.encodings[0].scaleResolutionDownBy=1;
+        p.degradationPreference='maintain-framerate';
+      }else{p.encodings[0].maxBitrate=510000;}
+      p.encodings[0].priority='high';p.encodings[0].networkPriority='high';
+      try{await snd.setParameters(p)}catch(e){delete p.degradationPreference;try{await snd.setParameters(p)}catch(e2){console.warn(e2)}}
+    }
+  }
+
   $('btnStart').onclick=async()=>{
     $('txMsg').textContent='';
-    try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:60,max:60},width:{ideal:3840},height:{ideal:2160}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:2,sampleRate:48000},systemAudio:'include',suppressLocalAudioPlayback:false});}
-    catch(e){$('txMsg').textContent='Captura cancelada ou bloqueada pelo navegador.';return;}
-    let aTracks=stream.getAudioTracks();
+    const q=QUAL[qSel];
+    let disp;
+    try{
+      disp=await navigator.mediaDevices.getDisplayMedia({
+        video:{width:{ideal:q.w},height:{ideal:q.h},frameRate:{ideal:q.fps,max:q.fps}},
+        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},
+        systemAudio:'include',windowAudio:'system',selfBrowserSurface:'exclude',surfaceSwitching:'include'
+      });
+    }catch(e){
+      if(e.name==='NotAllowedError'){$('txMsg').textContent='Captura cancelada.';return}
+      // navegador recusou as opções avançadas: tenta o básico
+      try{disp=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true})}
+      catch(e2){$('txMsg').textContent='Captura cancelada ou bloqueada pelo navegador.';return}
+    }
+    const vt=disp.getVideoTracks()[0];
+    try{vt.contentHint='motion'}catch(e){}
+    let audio=disp.getAudioTracks()[0]||null;
+    extras=[...disp.getTracks()];
     if($('chkMic').checked){
       try{
         const mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
-        const ctx=new AudioContext({sampleRate:48000}),dst=ctx.createMediaStreamDestination();
-        if(aTracks.length)ctx.createMediaStreamSource(new MediaStream(aTracks)).connect(dst);
-        ctx.createMediaStreamSource(mic).connect(dst);
-        const orig=stream;
-        stream=new MediaStream([orig.getVideoTracks()[0],dst.stream.getAudioTracks()[0]]);
-        stream._extra=[...aTracks,...mic.getTracks()];
-      }catch(e){$('txMsg').textContent='Microfone bloqueado; seguindo sem ele.';}
+        extras.push(...mic.getTracks());
+        if(audio){
+          const ctx=new AudioContext({sampleRate:48000}),dst=ctx.createMediaStreamDestination();
+          ctx.createMediaStreamSource(new MediaStream([audio])).connect(dst);
+          ctx.createMediaStreamSource(mic).connect(dst);
+          audio=dst.stream.getAudioTracks()[0];
+        }else audio=mic.getAudioTracks()[0];
+      }catch(e){$('txMsg').textContent='Microfone bloqueado; seguindo sem ele.'}
     }
-    $('semAudio').classList.toggle('hide',stream.getAudioTracks().length>0);
-    const vt=stream.getVideoTracks()[0];
-    try{vt.contentHint='motion';await vt.applyConstraints({frameRate:{ideal:60}});}catch(e){}
+    stream=new MediaStream(audio?[vt,audio]:[vt]);
+    $('semAudio').classList.toggle('hide',!!audio);
+    if(audio)vu(new MediaStream([audio]),$('vuTx'));
+
     const id=Math.random().toString(36).slice(2,8);
     peer=new Peer(PREF+id,ICE);
     peer.on('open',()=>{
@@ -98,67 +178,81 @@ if(!sala){ // ===== TRANSMISSOR =====
         const call=peer.call(conn.peer,stream,{sdpTransform:opusHQ});
         viewers.set(conn.peer,call);upd();
         const pc=call.peerConnection;
-        const turbo=async()=>{
-          for(const snd of pc.getSenders()){
-            if(!snd.track||snd.track.kind!=='video')continue;
-            const p=snd.getParameters();if(!p.encodings||!p.encodings.length)p.encodings=[{}];
-            p.encodings[0].maxBitrate=25000000;p.encodings[0].maxFramerate=60;
-            p.encodings[0].scaleResolutionDownBy=1;p.encodings[0].priority='high';p.encodings[0].networkPriority='high';
-            p.degradationPreference='maintain-framerate';
-            try{await snd.setParameters(p);}catch(e){delete p.degradationPreference;try{await snd.setParameters(p);}catch(e2){console.warn(e2)}}
-          }
-        };
-        pc.addEventListener('connectionstatechange',()=>{if(pc.connectionState==='connected')turbo()});
-        setTimeout(turbo,1500);
-        const sai=()=>{viewers.delete(conn.peer);upd();};
+        pc.addEventListener('connectionstatechange',()=>{if(pc.connectionState==='connected')tunePc(pc)});
+        setTimeout(()=>tunePc(pc),1500);
+        const sai=()=>{if(viewers.get(conn.peer)===call){viewers.delete(conn.peer);upd()}};
         conn.on('close',sai);call.on('close',sai);call.on('error',sai);
       });
     });
-    peer.on('error',e=>{$('txMsg').textContent='Erro: '+e.type;});
-    stream.getVideoTracks()[0].onended=parar;
+    peer.on('error',e=>{$('txMsg').textContent='Erro: '+e.type});
+    vt.onended=parar;
   };
+  const upd=()=>{const n=viewers.size;$('nViewers').textContent=n?`${n} pessoa(s) assistindo.`:'Ninguém assistindo ainda.'};
+  setInterval(()=>{
+    if(!stream)return;const s=stream.getVideoTracks()[0].getSettings();
+    $('txStats').textContent=`Capturando: ${s.width||'?'}×${s.height||'?'} @ ${Math.round(s.frameRate||0)} fps · áudio: ${stream.getAudioTracks().length?'SIM':'NÃO'}`;
+  },1000);
   function parar(){
-    stream&&[...stream.getTracks(),...(stream._extra||[])].forEach(t=>t.stop());
-    peer&&peer.destroy();viewers.clear();
+    extras.forEach(t=>t.stop());stream=null;
+    peer&&peer.destroy();viewers.clear();upd();
     $('txOn').classList.add('hide');$('txIni').classList.remove('hide');
     $('preview').classList.add('hide');$('dot').classList.remove('on');$('titulo').textContent='Transmitir Tela';
     $('txMsg').textContent='Transmissão encerrada.';
   }
   $('btnStop').onclick=parar;
   $('btnCopy').onclick=()=>{navigator.clipboard.writeText($('link').value);$('btnCopy').textContent='Copiado!';setTimeout(()=>$('btnCopy').textContent='Copiar',1500)};
-} else { // ===== ESPECTADOR =====
+
+} else { // ================= ESPECTADOR =================
   $('rx').classList.remove('hide');$('titulo').textContent='Assistindo transmissão';
-  const v=$('v');let peer,timer;
+  const v=$('v');let peer,timer,curCall,vuCtx;
   function conectar(){
     clearTimeout(timer);
     peer&&peer.destroy();
     peer=new Peer(ICE);
-    peer.on('open',()=>{
-      const conn=peer.connect(PREF+sala,{reliable:true});
-      conn.on('close',aguardar);
-    });
+    peer.on('open',()=>{const conn=peer.connect(PREF+sala,{reliable:true});conn.on('close',aguardar)});
     peer.on('call',call=>{
+      curCall=call;
       call.answer(undefined,{sdpTransform:opusHQ});
       call.on('stream',s=>{
-        v.srcObject=s;v.classList.remove('hide');$('rxMsg').classList.add('hide');
-        $('btnFull').classList.remove('hide');
+        v.srcObject=s;v.muted=true;v.play().catch(()=>{});
+        v.classList.remove('hide');$('rxMsg').classList.add('hide');
+        $('btnFull').classList.remove('hide');$('dot').classList.add('on');
         if(s.getAudioTracks().length){
-          v.muted=false;
-          v.play().catch(()=>{v.muted=true;v.play();$('btnSom').classList.remove('hide');});
-        } else {$('rxMsg').textContent='(Transmissão sem áudio)';$('rxMsg').classList.remove('hide');}
-        $('dot').classList.add('on');
+          $('btnSom').classList.remove('hide');$('rxVuRow').classList.remove('hide');
+        }
       });
       call.on('close',aguardar);
     });
-    peer.on('error',e=>{ if(e.type==='peer-unavailable')aguardar('A transmissão ainda não começou ou foi encerrada. Tentando de novo…'); else aguardar('Problema de conexão ('+e.type+'). Tentando de novo…'); });
+    peer.on('error',e=>aguardar(e.type==='peer-unavailable'?'A transmissão ainda não começou ou foi encerrada. Tentando de novo…':'Problema de conexão ('+e.type+'). Tentando de novo…'));
   }
   function aguardar(msg){
-    $('dot').classList.remove('on');v.classList.add('hide');
+    $('dot').classList.remove('on');v.classList.add('hide');curCall=null;
     $('rxMsg').textContent=typeof msg==='string'?msg:'Transmissão encerrada. Aguardando…';$('rxMsg').classList.remove('hide');
     clearTimeout(timer);timer=setTimeout(conectar,4000);
   }
-  $('btnSom').onclick=()=>{v.muted=false;v.play();$('btnSom').classList.add('hide')};
-  $('btnFull').onclick=()=>v.requestFullscreen&&v.requestFullscreen();
+  // ativar som: precisa de toque do usuário (regra dos navegadores)
+  $('btnSom').onclick=()=>{
+    v.muted=false;v.volume=1;v.play().catch(()=>{});
+    if(!vuCtx&&v.srcObject){vuCtx=vu(v.srcObject,$('vuRx'))}
+    vuCtx&&vuCtx.resume&&vuCtx.resume();
+    $('btnSom').classList.add('hide');
+  };
+  $('btnFull').onclick=()=>{const f=v.requestFullscreen||v.webkitEnterFullscreen||v.webkitRequestFullscreen;f&&f.call(v)};
+  // painel: o que está chegando
+  let last={};
+  setInterval(async()=>{
+    if(!curCall||!curCall.peerConnection)return;
+    const st=await curCall.peerConnection.getStats();let vi='',au='';
+    st.forEach(r=>{
+      if(r.type!=='inbound-rtp')return;
+      const k=r.kind||r.mediaType,prev=last[r.id];
+      const kbps=prev?Math.round((r.bytesReceived-prev.b)*8/((r.timestamp-prev.t)))||0:0;
+      last[r.id]={b:r.bytesReceived,t:r.timestamp};
+      if(k==='video')vi=`Vídeo: ${r.frameWidth||'?'}×${r.frameHeight||'?'} @ ${Math.round(r.framesPerSecond||0)} fps · ${(kbps/1000).toFixed(1)} Mbps`;
+      if(k==='audio')au=` · Áudio: ${kbps>0?'chegando ('+kbps+' kbps)':'sem dados'}`;
+    });
+    $('rxStats').textContent=vi+(au||' · Áudio: não enviado');
+  },1000);
   conectar();
 }
 </script>
