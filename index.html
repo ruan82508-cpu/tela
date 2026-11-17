@@ -38,6 +38,11 @@ video{width:100%;max-height:calc(100vh - 170px);background:#000;border-radius:8p
     <div class="mut" style="margin-bottom:6px">Qualidade</div>
     <div class="q" id="qBtns"></div>
     <div id="txIni" style="margin-top:16px">
+      <div class="mut" style="margin-bottom:6px">O que transmitir</div>
+      <div class="q" id="mBtns" style="margin-bottom:12px">
+        <button data-m="guia">Guia (só o som da guia)</button>
+        <button data-m="tela">Tela inteira + som do PC</button>
+      </div>
       <label style="display:block;margin:0 0 12px"><input type="checkbox" id="chkMic"> Incluir meu microfone</label>
       <button id="btnStart">Transmitir minha tela</button>
       <p class="mut">Para ter som: escolha <b>Tela inteira</b> e marque <b>"Compartilhar áudio do sistema"</b>, ou escolha uma <b>Guia</b> e marque <b>"Compartilhar áudio da guia"</b>. Janela de programa não envia som.</p>
@@ -105,6 +110,10 @@ if(!sala){ // ================= TRANSMISSOR =================
   for(const k in QUAL){const b=document.createElement('button');b.textContent=QUAL[k].nome;b.dataset.k=k;b.onclick=()=>setQual(k);qb.appendChild(b)}
   const marcaQ=()=>[...qb.children].forEach(b=>b.classList.toggle('sel',b.dataset.k===qSel));
   marcaQ();
+  let modo='guia';try{modo=localStorage.getItem('modo')||'guia'}catch(e){}
+  const mb=$('mBtns'),marcaM=()=>[...mb.children].forEach(b=>b.classList.toggle('sel',b.dataset.m===modo));
+  [...mb.children].forEach(b=>b.onclick=()=>{modo=b.dataset.m;marcaM();try{localStorage.setItem('modo',modo)}catch(e){}});
+  marcaM();
 
   async function setQual(k){
     qSel=k;marcaQ();try{localStorage.setItem('qual',k)}catch(e){}
@@ -135,8 +144,13 @@ if(!sala){ // ================= TRANSMISSOR =================
       disp=await navigator.mediaDevices.getDisplayMedia({
         video:{width:{ideal:q.w},height:{ideal:q.h},frameRate:{ideal:q.fps,max:q.fps}},
         audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},
-        systemAudio:'include',windowAudio:'system',selfBrowserSurface:'exclude',surfaceSwitching:'include'
+        ...(modo==='guia'
+          ? {displaySurface:'browser',systemAudio:'exclude',windowAudio:'exclude',monitorTypeSurfaces:'exclude',preferCurrentTab:false}
+          : {displaySurface:'monitor',systemAudio:'include',windowAudio:'system'}),
+        selfBrowserSurface:'exclude',surfaceSwitching:'include'
       });
+      const ds=disp.getVideoTracks()[0].getSettings().displaySurface;
+      if(modo==='guia'&&ds&&ds!=='browser')$('txMsg').textContent='⚠ Você escolheu uma janela, não uma guia: vai sem som.';
     }catch(e){
       if(e.name==='NotAllowedError'){$('txMsg').textContent='Captura cancelada.';return}
       // navegador recusou as opções avançadas: tenta o básico
