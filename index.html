@@ -30,13 +30,16 @@ video{width:100%;max-height:calc(100vh - 120px);background:#000;border-radius:8p
   <div id="tx" class="card hide">
     <div id="txIni">
       <p>Clique para escolher a tela ou janela que será transmitida.</p>
+      <label style="display:block;margin:0 0 12px"><input type="checkbox" id="chkMic" style="flex:none;width:auto"> Incluir meu microfone</label>
       <button id="btnStart">Transmitir minha tela</button>
+      <p class="mut">Para ter som: na janela do navegador marque <b>"Compartilhar áudio do sistema"</b> (tela inteira) ou <b>"Compartilhar áudio da guia"</b> (aba).</p>
       <p class="mut">Mantenha esta aba aberta durante a transmissão.</p>
     </div>
     <div id="txOn" class="hide">
       <p><b>Transmitindo.</b> Envie este link:</p>
       <div class="row"><input id="link" readonly><button id="btnCopy" class="sec">Copiar</button></div>
       <div class="row"><button id="btnWa" class="wa">Enviar no WhatsApp</button><button id="btnStop" class="red">Parar</button></div>
+      <p id="semAudio" class="hide" style="color:#f0a04b">⚠ Sem áudio: você não marcou "Compartilhar áudio". Clique em Parar e transmita de novo marcando a opção.</p>
       <p class="mut" id="nViewers">Ninguém assistindo ainda.</p>
     </div>
     <p id="txMsg" class="mut"></p>
@@ -46,13 +49,15 @@ video{width:100%;max-height:calc(100vh - 120px);background:#000;border-radius:8p
   <div id="rx" class="hide" style="width:100%;max-width:1600px">
     <p id="rxMsg" class="mut" style="text-align:center">Conectando…</p>
     <video id="v" class="hide" autoplay playsinline muted controls></video>
-    <div class="row" style="justify-content:center"><button id="btnSom" class="sec hide">Ativar som</button><button id="btnFull" class="sec hide">Tela cheia</button></div>
+    <div class="row" style="justify-content:center"><button id="btnSom" class="hide" style="font-size:18px;padding:14px 26px">🔊 Toque para ativar o som</button><button id="btnFull" class="sec hide">Tela cheia</button></div>
   </div>
 </main>
 <script>
 const $=id=>document.getElementById(id);
 const PREF='amnis-tela-';
 const sala=new URLSearchParams(location.search).get('sala');
+const opusHQ=sdp=>{const m=sdp.match(/a=rtpmap:(\d+) opus\/48000/i);if(!m)return sdp;const pt=m[1];
+  return sdp.replace(new RegExp('a=fmtp:'+pt+' ([^\r\n]*)'),(x,f)=>'a=fmtp:'+pt+' '+f.replace(/;?(stereo|sprop-stereo|maxaveragebitrate|useinbandfec)=[^;]*/g,'')+';stereo=1;sprop-stereo=1;maxaveragebitrate=510000;useinbandfec=1');};
 const ICE={config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'}]}};
 
 if(!sala){ // ===== TRANSMISSOR =====
@@ -61,8 +66,21 @@ if(!sala){ // ===== TRANSMISSOR =====
   const upd=()=>{const n=viewers.size;$('nViewers').textContent=n?`${n} pessoa(s) assistindo.`:'Ninguém assistindo ainda.'};
   $('btnStart').onclick=async()=>{
     $('txMsg').textContent='';
-    try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:60,max:60},width:{ideal:3840},height:{ideal:2160}},audio:true});}
+    try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:60,max:60},width:{ideal:3840},height:{ideal:2160}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:2,sampleRate:48000},systemAudio:'include',suppressLocalAudioPlayback:false});}
     catch(e){$('txMsg').textContent='Captura cancelada ou bloqueada pelo navegador.';return;}
+    let aTracks=stream.getAudioTracks();
+    if($('chkMic').checked){
+      try{
+        const mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+        const ctx=new AudioContext({sampleRate:48000}),dst=ctx.createMediaStreamDestination();
+        if(aTracks.length)ctx.createMediaStreamSource(new MediaStream(aTracks)).connect(dst);
+        ctx.createMediaStreamSource(mic).connect(dst);
+        const orig=stream;
+        stream=new MediaStream([orig.getVideoTracks()[0],dst.stream.getAudioTracks()[0]]);
+        stream._extra=[...aTracks,...mic.getTracks()];
+      }catch(e){$('txMsg').textContent='Microfone bloqueado; seguindo sem ele.';}
+    }
+    $('semAudio').classList.toggle('hide',stream.getAudioTracks().length>0);
     const vt=stream.getVideoTracks()[0];
     try{vt.contentHint='motion';await vt.applyConstraints({frameRate:{ideal:60}});}catch(e){}
     const id=Math.random().toString(36).slice(2,8);
@@ -77,7 +95,7 @@ if(!sala){ // ===== TRANSMISSOR =====
     });
     peer.on('connection',conn=>{
       conn.on('open',()=>{
-        const call=peer.call(conn.peer,stream);
+        const call=peer.call(conn.peer,stream,{sdpTransform:opusHQ});
         viewers.set(conn.peer,call);upd();
         const pc=call.peerConnection;
         const turbo=async()=>{
@@ -100,7 +118,7 @@ if(!sala){ // ===== TRANSMISSOR =====
     stream.getVideoTracks()[0].onended=parar;
   };
   function parar(){
-    stream&&stream.getTracks().forEach(t=>t.stop());
+    stream&&[...stream.getTracks(),...(stream._extra||[])].forEach(t=>t.stop());
     peer&&peer.destroy();viewers.clear();
     $('txOn').classList.add('hide');$('txIni').classList.remove('hide');
     $('preview').classList.add('hide');$('dot').classList.remove('on');$('titulo').textContent='Transmitir Tela';
@@ -120,11 +138,14 @@ if(!sala){ // ===== TRANSMISSOR =====
       conn.on('close',aguardar);
     });
     peer.on('call',call=>{
-      call.answer();
+      call.answer(undefined,{sdpTransform:opusHQ});
       call.on('stream',s=>{
         v.srcObject=s;v.classList.remove('hide');$('rxMsg').classList.add('hide');
         $('btnFull').classList.remove('hide');
-        if(s.getAudioTracks().length)$('btnSom').classList.remove('hide');
+        if(s.getAudioTracks().length){
+          v.muted=false;
+          v.play().catch(()=>{v.muted=true;v.play();$('btnSom').classList.remove('hide');});
+        } else {$('rxMsg').textContent='(Transmissão sem áudio)';$('rxMsg').classList.remove('hide');}
         $('dot').classList.add('on');
       });
       call.on('close',aguardar);
