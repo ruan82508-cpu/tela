@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Transmitir Tela</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{--bg:#0f1115;--card:#1a1d24;--tx:#e8eaed;--mut:#9aa0a6;--ac:#2f7cf6;--ok:#22a35a;--err:#d9483b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,Segoe UI,Arial,sans-serif;min-height:100vh;display:flex;flex-direction:column}
+header{padding:14px 16px;font-weight:600;display:flex;gap:10px;align-items:center}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--mut)}
+.dot.on{background:var(--err);box-shadow:0 0 8px var(--err)}
+main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:16px}
+.card{background:var(--card);border-radius:12px;padding:20px;max-width:560px;width:100%}
+button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:12px 18px;font-size:15px;cursor:pointer}
+button.sec{background:#33373f}button.red{background:var(--err)}button.wa{background:var(--ok)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+input{flex:1;min-width:0;background:#0b0d10;color:var(--tx);border:1px solid #333;border-radius:8px;padding:10px;font-size:14px}
+.mut{color:var(--mut);font-size:13px}
+video{width:100%;max-height:calc(100vh - 120px);background:#000;border-radius:8px}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<header><span id="dot" class="dot"></span><span id="titulo">Transmitir Tela</span></header>
+<main>
+  <!-- TRANSMISSOR -->
+  <div id="tx" class="card hide">
+    <div id="txIni">
+      <p>Clique para escolher a tela ou janela que será transmitida.</p>
+      <button id="btnStart">Transmitir minha tela</button>
+      <p class="mut">Mantenha esta aba aberta durante a transmissão.</p>
+    </div>
+    <div id="txOn" class="hide">
+      <p><b>Transmitindo.</b> Envie este link:</p>
+      <div class="row"><input id="link" readonly><button id="btnCopy" class="sec">Copiar</button></div>
+      <div class="row"><button id="btnWa" class="wa">Enviar no WhatsApp</button><button id="btnStop" class="red">Parar</button></div>
+      <p class="mut" id="nViewers">Ninguém assistindo ainda.</p>
+    </div>
+    <p id="txMsg" class="mut"></p>
+  </div>
+  <video id="preview" class="hide" muted autoplay playsinline></video>
+  <!-- ESPECTADOR -->
+  <div id="rx" class="hide" style="width:100%;max-width:1600px">
+    <p id="rxMsg" class="mut" style="text-align:center">Conectando…</p>
+    <video id="v" class="hide" autoplay playsinline muted controls></video>
+    <div class="row" style="justify-content:center"><button id="btnSom" class="sec hide">Ativar som</button><button id="btnFull" class="sec hide">Tela cheia</button></div>
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const PREF='amnis-tela-';
+const sala=new URLSearchParams(location.search).get('sala');
+const ICE={config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'}]}};
+
+if(!sala){ // ===== TRANSMISSOR =====
+  $('tx').classList.remove('hide');
+  let peer,stream,viewers=new Map();
+  const upd=()=>{const n=viewers.size;$('nViewers').textContent=n?`${n} pessoa(s) assistindo.`:'Ninguém assistindo ainda.'};
+  $('btnStart').onclick=async()=>{
+    $('txMsg').textContent='';
+    try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:15},audio:true});}
+    catch(e){$('txMsg').textContent='Captura cancelada ou bloqueada pelo navegador.';return;}
+    const id=Math.random().toString(36).slice(2,8);
+    peer=new Peer(PREF+id,ICE);
+    peer.on('open',()=>{
+      const url=location.origin+location.pathname+'?sala='+id;
+      $('link').value=url;
+      $('btnWa').onclick=()=>window.open('https://wa.me/?text='+encodeURIComponent('Acompanhe minha tela: '+url));
+      $('txIni').classList.add('hide');$('txOn').classList.remove('hide');
+      $('dot').classList.add('on');$('titulo').textContent='Ao vivo';
+      $('preview').srcObject=stream;$('preview').classList.remove('hide');
+    });
+    peer.on('connection',conn=>{
+      conn.on('open',()=>{
+        const call=peer.call(conn.peer,stream);
+        viewers.set(conn.peer,call);upd();
+        const sai=()=>{viewers.delete(conn.peer);upd();};
+        conn.on('close',sai);call.on('close',sai);call.on('error',sai);
+      });
+    });
+    peer.on('error',e=>{$('txMsg').textContent='Erro: '+e.type;});
+    stream.getVideoTracks()[0].onended=parar;
+  };
+  function parar(){
+    stream&&stream.getTracks().forEach(t=>t.stop());
+    peer&&peer.destroy();viewers.clear();
+    $('txOn').classList.add('hide');$('txIni').classList.remove('hide');
+    $('preview').classList.add('hide');$('dot').classList.remove('on');$('titulo').textContent='Transmitir Tela';
+    $('txMsg').textContent='Transmissão encerrada.';
+  }
+  $('btnStop').onclick=parar;
+  $('btnCopy').onclick=()=>{navigator.clipboard.writeText($('link').value);$('btnCopy').textContent='Copiado!';setTimeout(()=>$('btnCopy').textContent='Copiar',1500)};
+} else { // ===== ESPECTADOR =====
+  $('rx').classList.remove('hide');$('titulo').textContent='Assistindo transmissão';
+  const v=$('v');let peer,timer;
+  function conectar(){
+    clearTimeout(timer);
+    peer&&peer.destroy();
+    peer=new Peer(ICE);
+    peer.on('open',()=>{
+      const conn=peer.connect(PREF+sala,{reliable:true});
+      conn.on('close',aguardar);
+    });
+    peer.on('call',call=>{
+      call.answer();
+      call.on('stream',s=>{
+        v.srcObject=s;v.classList.remove('hide');$('rxMsg').classList.add('hide');
+        $('btnFull').classList.remove('hide');
+        if(s.getAudioTracks().length)$('btnSom').classList.remove('hide');
+        $('dot').classList.add('on');
+      });
+      call.on('close',aguardar);
+    });
+    peer.on('error',e=>{ if(e.type==='peer-unavailable')aguardar('A transmissão ainda não começou ou foi encerrada. Tentando de novo…'); else aguardar('Problema de conexão ('+e.type+'). Tentando de novo…'); });
+  }
+  function aguardar(msg){
+    $('dot').classList.remove('on');v.classList.add('hide');
+    $('rxMsg').textContent=typeof msg==='string'?msg:'Transmissão encerrada. Aguardando…';$('rxMsg').classList.remove('hide');
+    clearTimeout(timer);timer=setTimeout(conectar,4000);
+  }
+  $('btnSom').onclick=()=>{v.muted=false;v.play();$('btnSom').classList.add('hide')};
+  $('btnFull').onclick=()=>v.requestFullscreen&&v.requestFullscreen();
+  conectar();
+}
+</script>
+</body>
+</html>
